@@ -61,6 +61,10 @@ class SomeViewModel @Inject constructor(
 
     private suspend fun heavyWork(): Int {
         delay(1000L)
+        val exception = r.nextBoolean()
+        if (exception) {
+            throw Exception("")
+        }
         return r.nextInt()
     }
 }

@@ -40,7 +40,17 @@ class SomeFragment : BaseFragment<SomeFragmentBinding>() {
             }
             launch {
                 someViewModel.loadingState.collect { // 로딩 상태를 받아 UI를 업데이트
-                    binding.loadingTextView.text = if (it) "loading" else "not loading"
+                    binding.loadingTextView.text = when (it) {
+                        is LoadingState.NotLoading -> {
+                            "not loading"
+                        }
+                        is LoadingState.Loading -> {
+                            "loading"
+                        }
+                        is LoadingState.Error -> {
+                            "error"
+                        }
+                    }
                 }
             }
         }

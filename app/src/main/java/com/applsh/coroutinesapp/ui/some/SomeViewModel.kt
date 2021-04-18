@@ -4,12 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.consumeAsFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.plus
 import javax.inject.Inject
 import kotlin.random.Random
 
@@ -21,13 +19,34 @@ class SomeViewModel @Inject constructor(
 
     private val r = Random(0)
 
-    val loadingState = MutableStateFlow(false)
+    val loadingState = MutableStateFlow<LoadingState>(LoadingState.NotLoading)
 
-    private val _dataStateOutput = MutableStateFlow<Int?>(null)
-    val dataStateOutput: Flow<Int?> = _dataStateOutput
+    val dataStateOutput = loadingState
+        // .filter { false }
+        .transform {
+            if (it != LoadingState.Loading) return@transform
+            try {
+                val data = heavyWork()
+                loadingState.value = LoadingState.NotLoading
+                emit(data)
+            } catch (e: Exception) {
+                loadingState.value = LoadingState.Error
+            }
+        }
+        .stateIn(viewModelScope + Dispatchers.IO, SharingStarted.Lazily, null)
 
-    private val _dataEventOutput = Channel<Int>(0)
-    val dataEventOutput = _dataEventOutput.consumeAsFlow()
+    val dataEventOutput = loadingState
+        .filter { false }
+        .transform {
+            if (it != LoadingState.Loading) return@transform
+            try {
+                val data = heavyWork()
+                loadingState.value = LoadingState.NotLoading
+                emit(data)
+            } catch (e: Exception) {
+                loadingState.value = LoadingState.Error
+            }
+        }.flowOn(Dispatchers.IO)
 
     fun onClick() {
         viewModelScope.launch {
@@ -40,23 +59,11 @@ class SomeViewModel @Inject constructor(
     }
 
     private suspend fun loadDataState() {
-        if (loadingState.compareAndSet(expect = false, update = true)) {
-            try {
-                _dataStateOutput.value = heavyWork()
-            } finally {
-                loadingState.value = false
-            }
-        }
+        loadingState.value = LoadingState.Loading
     }
 
     private suspend fun loadDataEvent() {
-        if (loadingState.compareAndSet(expect = false, update = true)) {
-            try {
-                _dataEventOutput.send(heavyWork())
-            } finally {
-                loadingState.value = false
-            }
-        }
+        loadingState.value = LoadingState.Loading
     }
 
     private suspend fun heavyWork(): Int {
@@ -67,4 +74,10 @@ class SomeViewModel @Inject constructor(
         }
         return r.nextInt()
     }
+}
+
+sealed class LoadingState {
+    object NotLoading : LoadingState()
+    object Loading : LoadingState()
+    object Error : LoadingState()
 }
